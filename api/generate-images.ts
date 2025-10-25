@@ -2,21 +2,8 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createCanvas, loadImage, CanvasRenderingContext2D, CanvasTextAlign, CanvasTextBaseline, registerFont } from 'canvas';
-import path from 'path';
-// FIX: Import `cwd` from `process` to avoid type errors with the global `process` object.
-import { cwd } from 'process';
-
-// --- Register Custom Font ---
-// This ensures the font is available in the serverless environment, fixing the "□□□" issue.
-try {
-  // FIX: Use the imported `cwd()` function instead of `process.cwd()`.
-  const fontPath = path.join(cwd(), 'fonts', 'Arial_Bold.ttf');
-  registerFont(fontPath, { family: 'Arial Bold' });
-} catch (err) {
-  // Log an error if font registration fails, which helps in debugging deployment issues.
-  console.error('Failed to register font. Text might not render correctly.', err);
-}
-
+// FIX: The `Buffer` type is not available globally in this environment, so it must be imported.
+import { Buffer } from 'buffer';
 
 // --- Type Definitions ---
 interface AnimalData {
@@ -62,9 +49,9 @@ const drawTextWithShadow = (
   ctx.shadowBlur = 0;
 };
 
-const generateAnimalImage = async (baseImageUrl: string, data: AnimalData): Promise<string> => {
+const generateAnimalImage = async (baseImageBuffer: Buffer, data: AnimalData): Promise<string> => {
     try {
-        const img = await loadImage(baseImageUrl);
+        const img = await loadImage(baseImageBuffer);
         const canvas = createCanvas(img.width, img.height);
         const ctx = canvas.getContext('2d');
 
@@ -115,9 +102,9 @@ const generateAnimalImage = async (baseImageUrl: string, data: AnimalData): Prom
     }
 };
 
-const generateBrainImage = async (baseImageUrl: string, data: BrainData): Promise<string> => {
+const generateBrainImage = async (baseImageBuffer: Buffer, data: BrainData): Promise<string> => {
     try {
-        const img = await loadImage(baseImageUrl);
+        const img = await loadImage(baseImageBuffer);
         const canvas = createCanvas(img.width, img.height);
         const ctx = canvas.getContext('2d');
   
@@ -168,15 +155,15 @@ const generateBrainImage = async (baseImageUrl: string, data: BrainData): Promis
     }
 };
 
+// --- Resource URLs ---
+const FONT_URL = 'https://drive.google.com/uc?export=download&id=1Djbg9Gj1-PUL7qFvMMjqRuljvXYzNmeD';
 const BASE_IMAGE_BRAIN_URL = 'https://i.postimg.cc/LXMYjwtX/Inserir-um-t-tulo-6.png';
-// Updated URL as per request
 const BASE_IMAGE_ANIMALS_URL = 'https://i.postimg.cc/6QDYdjPb/Design-sem-nome-17.png';
 
 
 // --- Vercel Serverless Function Handler ---
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // We only accept POST requests
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
@@ -184,14 +171,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const { animalData, brainData } = req.body;
 
-    // Basic validation
     if (!animalData || !brainData) {
       return res.status(400).json({ error: 'Request body must contain "animalData" and "brainData" objects.' });
     }
     
+    // Step 1: Download all resources (font and images) in parallel.
+    const [fontResponse, animalImgResponse, brainImgResponse] = await Promise.all([
+      fetch(FONT_URL),
+      fetch(BASE_IMAGE_ANIMALS_URL),
+      fetch(BASE_IMAGE_BRAIN_URL)
+    ]);
+
+    // Check if all downloads were successful.
+    if (!fontResponse.ok || !animalImgResponse.ok || !brainImgResponse.ok) {
+       throw new Error(`Failed to download resources. Font: ${fontResponse.status}, Animals: ${animalImgResponse.status}, Brain: ${brainImgResponse.status}`);
+    }
+
+    // Convert responses to buffers.
+    const [fontBuffer, animalImgBuffer, brainImgBuffer] = await Promise.all([
+        fontResponse.arrayBuffer().then(ab => Buffer.from(ab)),
+        animalImgResponse.arrayBuffer().then(ab => Buffer.from(ab)),
+        brainImgResponse.arrayBuffer().then(ab => Buffer.from(ab))
+    ]);
+
+    // Step 2: Register the downloaded font from the buffer.
+    registerFont(fontBuffer, { family: 'Arial Bold' });
+    
+    // Step 3: Generate images using the downloaded buffers.
     const [animalImage, brainImage] = await Promise.all([
-      generateAnimalImage(BASE_IMAGE_ANIMALS_URL, animalData),
-      generateBrainImage(BASE_IMAGE_BRAIN_URL, brainData),
+      generateAnimalImage(animalImgBuffer, animalData),
+      generateBrainImage(brainImgBuffer, brainData),
     ]);
 
     res.status(200).json({
