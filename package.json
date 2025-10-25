@@ -13,7 +13,8 @@
     "@vercel/node": "^5.4.0",
     "path": "^0.12.7",
     "process": "^0.11.10",
-    "buffer": "^6.0.3"
+    "buffer": "^6.0.3",
+    "fs": "^0.0.1-security"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

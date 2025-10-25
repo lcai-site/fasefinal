@@ -2,8 +2,10 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createCanvas, loadImage, CanvasRenderingContext2D, CanvasTextAlign, CanvasTextBaseline, registerFont } from 'canvas';
-// FIX: The `Buffer` type is not available globally in this environment, so it must be imported.
 import { Buffer } from 'buffer';
+import fs from 'fs';
+import path from 'path';
+
 
 // --- Type Definitions ---
 interface AnimalData {
@@ -168,6 +170,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
+  // Define a temporary path for the font file in a writable directory.
+  const tempFontPath = path.join('/tmp', 'Arial_Bold.ttf');
+
   try {
     const { animalData, brainData } = req.body;
 
@@ -194,10 +199,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         brainImgResponse.arrayBuffer().then(ab => Buffer.from(ab))
     ]);
 
-    // Step 2: Register the downloaded font from the buffer.
-    registerFont(fontBuffer, { family: 'Arial Bold' });
+    // Step 2: Save the font buffer to a temporary file.
+    // This is necessary because node-canvas's registerFont requires a file path.
+    fs.writeFileSync(tempFontPath, fontBuffer);
     
-    // Step 3: Generate images using the downloaded buffers.
+    // Step 3: Register the font using the temporary file path.
+    registerFont(tempFontPath, { family: 'Arial Bold' });
+    
+    // Step 4: Generate images using the downloaded buffers.
     const [animalImage, brainImage] = await Promise.all([
       generateAnimalImage(animalImgBuffer, animalData),
       generateBrainImage(brainImgBuffer, brainData),
@@ -211,5 +220,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error('Image generation failed:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
     res.status(500).json({ error: 'Failed to generate images.', details: errorMessage });
+  } finally {
+    // Step 5 (Cleanup): Remove the temporary font file to free up space.
+    try {
+        if (fs.existsSync(tempFontPath)) {
+            fs.unlinkSync(tempFontPath);
+        }
+    } catch (cleanupError) {
+        console.error('Failed to cleanup temporary font file:', cleanupError);
+    }
   }
 }
