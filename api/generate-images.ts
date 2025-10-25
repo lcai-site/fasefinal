@@ -1,7 +1,22 @@
 // api/generate-images.ts
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createCanvas, loadImage, CanvasRenderingContext2D, CanvasTextAlign, CanvasTextBaseline } from 'canvas';
+import { createCanvas, loadImage, CanvasRenderingContext2D, CanvasTextAlign, CanvasTextBaseline, registerFont } from 'canvas';
+import path from 'path';
+// FIX: Import `cwd` from `process` to avoid type errors with the global `process` object.
+import { cwd } from 'process';
+
+// --- Register Custom Font ---
+// This ensures the font is available in the serverless environment, fixing the "□□□" issue.
+try {
+  // FIX: Use the imported `cwd()` function instead of `process.cwd()`.
+  const fontPath = path.join(cwd(), 'fonts', 'Arial_Bold.ttf');
+  registerFont(fontPath, { family: 'Arial Bold' });
+} catch (err) {
+  // Log an error if font registration fails, which helps in debugging deployment issues.
+  console.error('Failed to register font. Text might not render correctly.', err);
+}
+
 
 // --- Type Definitions ---
 interface AnimalData {
@@ -68,7 +83,7 @@ const generateAnimalImage = async (baseImageUrl: string, data: AnimalData): Prom
             }
         }
 
-        const fontName = 'Arial, sans-serif';
+        const fontName = '"Arial Bold"'; // Use the registered font
         const normalFontSize = 36;
         const highestFontSize = 40;
         const normalColor = '#FFFFFF'; // White
@@ -85,7 +100,7 @@ const generateAnimalImage = async (baseImageUrl: string, data: AnimalData): Prom
           const isHighest = name === highestAnimalName;
           const fontSize = isHighest ? highestFontSize : normalFontSize;
           const color = isHighest ? highestColor : normalColor;
-          const font = `bold ${fontSize}px ${fontName}`;
+          const font = `${fontSize}px ${fontName}`;
           const text = `${percentage}%`;
           const { x, y } = positions[name];
 
@@ -121,7 +136,7 @@ const generateBrainImage = async (baseImageUrl: string, data: BrainData): Promis
             }
         }
         
-        const fontName = 'Arial, sans-serif';
+        const fontName = '"Arial Bold"'; // Use the registered font
         const normalFontSize = 36;
         const highestFontSize = 40;
         const normalColor = '#FFFFFF'; // White
@@ -138,7 +153,7 @@ const generateBrainImage = async (baseImageUrl: string, data: BrainData): Promis
             const isHighest = name === highestBrainName;
             const fontSize = isHighest ? highestFontSize : normalFontSize;
             const color = isHighest ? highestColor : normalColor;
-            const font = `bold ${fontSize}px ${fontName}`;
+            const font = `${fontSize}px ${fontName}`;
             const text = `${percentage}%`;
             const { x, y } = positions[name];
 
